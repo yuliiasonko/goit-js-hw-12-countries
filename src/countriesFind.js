@@ -1,71 +1,88 @@
-import './styles.css';
-import fetchCountries from './fetchCountries.js';
-import countryListItemsTemplate from './tamplate/countryListItem.hbs';
-import countriesListTemplate from './tamplate/countrieList.hbs';
-import '@pnotify/core/dist/BrightTheme.css';
-import debounce from 'lodash.debounce';
-import 'material-design-icons/iconfont/material-icons.css';
-import '@pnotify/bootstrap4/dist/PNotifyBootstrap4.css';
-import '@pnotify/core/dist/Material.css';
-import '@pnotify/core/dist/Angeler.css';
-import '@pnotify/bootstrap4/dist/PNotifyBootstrap4.css';
- import '@pnotify/core/dist/PNotify.js';
+const debounce = require('lodash.debounce');
+
+import error from './pnotify';
+import { refs } from './refs';
+import fetchCountries from './fetchCountries';
+import countryListItemTempalte from './tamplate/countryListItem.hbs'
 
 
-const refs = {
-  searchForm: document.querySelector('#search-form'),
-  countryList: document.querySelector('#country-list'),
-  searchInput: document.querySelector('.search__input'),
-};
-
-refs.searchForm.addEventListener('submit', event => {
-  event.preventDefault();
-});
-
-refs.searchForm.addEventListener(
+refs.input.addEventListener(
   'input',
-  debounce(e => {
-    searchFormInputHandler(e);
-  }, 500),
+  debounce(handleGenerateListFromResponse, 1000),
 );
 
-function searchFormInputHandler(e) {
-  const searchQuery = e.target.value;
+// Забираем значение с инпута 
+function handleGenerateListFromResponse(event) {
+  let inputValue = event.target.value.trim();
 
-  clearListItems();
+  if (!inputValue) {      
+    error404();
+    return;
+  }
 
-  fetchCountries(searchQuery).then(data => {
-    const markup = buildListItemMarkup(data);
-    const renderCountriesList = buildCountriesList(data);
-    if (!data) {
-      return;
-    } else if (data.length > 10) {
-      PNotify.defaults.styling = 'material';
-      PNotify.error({
-        text: 'Too many matches found. Please enter a more specific query!',
-      });
-    } else if (data.length >= 2 && data.length <= 10) {
-      insertListItem(renderCountriesList);
-    } else if (data.length === 1) {
-      insertListItem(markup);
-    } else {
-      alert('Корректно введите запрос');
+    getCountriesList(inputValue)
+}
+
+// Создаем разметку страны по шаблону hbs
+function addFullCoutryInfo(country) {
+  const markup = countryListItemTempalte(country);
+
+   //   Добавляем новую разметку страны
+  refs.countryContainer.insertAdjacentHTML('beforeend', markup);
+}
+
+function clearContent(){
+  refs.input.value = '';
+  refs.inputMessage.innerHTML = '';
+  refs.inputList.innerHTML = '';
+  refs.countryContainer.innerHTML = '';  
+}
+
+// Выводим значение в зависимости от полученого к-ва стран
+function selectTypeOutputInfo(numberOfCountries) {
+  console.log(numberOfCountries);
+
+  if (numberOfCountries.length < 2) {
+    clearContent();
+    addFullCoutryInfo(numberOfCountries);
+  }
+
+  if(numberOfCountries.length >= 2 && numberOfCountries.length <= 10) {
+        clearContent();                    
+        numberOfCountries.forEach(country => {
+            refs.inputList.insertAdjacentHTML('beforeend',`<li>${country.name}</li>`)
+        });             
+
+        refs.inputList.addEventListener('click', e => {
+            clearContent();
+            const getInputValue = refs.input.value = e.target.textContent;            
+            const country = numberOfCountries.find(country => {              
+              return country.name === getInputValue
+            })            
+            addFullCoutryInfo({country});
+        })                 
     }
-  });
+ 
+  if (numberOfCountries.length > 10) {
+    clearContent();
+    const message = 'Найдено слишком много совпадений, уточните ваш запрос'
+    refs.inputMessage.insertAdjacentHTML('beforeend', message);
+    error({
+      title: 'Ошибка',
+      text: message,
+      delay: 2000,  
+  }); 
+  }
 }
 
-function insertListItem(items) {
-  refs.countryList.insertAdjacentHTML('beforeend', items);
+function getCountriesList(value) {
+  fetchCountries(value)
+    .then(countries => selectTypeOutputInfo(countries))
+    .catch(error => error404(error));
 }
 
-function buildCountriesList(items) {
-  return countriesListTemplate(items);
-}
-
-function buildListItemMarkup(items) {
-  return countryListItemsTemplate(items);
-}
-
-function clearListItems() {
-  refs.countryList.innerHTML = '';
+function error404(err){
+  clearContent();
+  const message = 'Не корректный запрос. Повторите попытку еще раз'
+  refs.inputMessage.insertAdjacentHTML('beforeend', message);  
 }
